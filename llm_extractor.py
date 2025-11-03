@@ -52,11 +52,11 @@ class LLMExtractor:
             content = response.choices[0].message.content.strip()
             
             # Remove marcadores de código se presentes
-            if content.startswith('''json'):
+            if content.startswith('```json'):
                 content = content[7:]
-            if content.startswith(''''):
+            if content.startswith('```'):
                 content = content[3:]
-            if content.endswith(''''):
+            if content.endswith('```'):
                 content = content[:-3]
             
             # Converte para dicionário
