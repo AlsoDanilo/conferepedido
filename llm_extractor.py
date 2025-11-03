@@ -1,6 +1,6 @@
-"""
+'''
 Módulo para extração de dados estruturados de resumos de pedidos usando LLM.
-"""
+'''
 
 import json
 import logging
@@ -52,11 +52,11 @@ class LLMExtractor:
             content = response.choices[0].message.content.strip()
             
             # Remove marcadores de código se presentes
-            if content.startswith('```json'):
+            if content.startswith('''json'):
                 content = content[7:]
-            if content.startswith('```'):
+            if content.startswith(''''):
                 content = content[3:]
-            if content.endswith('```'):
+            if content.endswith(''''):
                 content = content[:-3]
             
             # Converte para dicionário
@@ -92,7 +92,7 @@ Extraia os seguintes dados:
 - nome: Nome do cliente
 - telefone: Telefone sem formatação (apenas números)
 - unidade: Nome da unidade/loja
-- produtos: Lista de produtos com nome e preço
+- produtos: Lista de produtos com nome, tamanho e preço
 - endereco: Endereço completo (se for entrega)
 - bairro: Nome do bairro (se for entrega)
 - taxa_entrega: Valor da taxa (0 se for retirada)
@@ -110,6 +110,7 @@ Retorne APENAS um JSON válido com a seguinte estrutura:
   "produtos": [
     {{
       "nome": "string",
+      "tamanho": "string",
       "preco": number
     }}
   ],
