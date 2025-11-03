@@ -6,7 +6,6 @@ import logging
 from typing import Dict, List, Optional
 from supabase import create_client, Client
 from config import Config
-from difflib import get_close_matches
 import unicodedata
 
 logger = logging.getLogger(__name__)
@@ -27,87 +26,6 @@ class SupabaseClient:
             logger.error(f"Erro ao conectar ao Supabase: {e}")
             self.client = None
 
-    def get_products(self) -> List[Dict]:
-        """Retorna todos os produtos disponíveis."""
-        try:
-            response = self.client.table('produtos').select('*').eq('status', 'Disponível').execute()
-            return response.data
-        except Exception as e:
-            logger.error(f"Erro ao buscar produtos: {e}")
-            return []
-
-    def get_product_by_name_and_size(self, nome: str, tamanho: Optional[str] = None) -> Optional[Dict]:
-        """
-        Busca um produto pelo nome e tamanho (opcional) usando correspondência aproximada.
-
-        Args:
-            nome: Nome do produto
-            tamanho: Tamanho (grande, médio, pequeno)
-
-        Returns:
-            Dicionário com dados do produto ou None
-        """
-        try:
-            produtos = self.get_products()
-            normalized_nome = self._normalize_text(nome)
-
-            # Filtra por tamanho se fornecido
-            if tamanho:
-                produtos = [p for p in produtos if self._normalize_text(p.get('tamanho', '')) == self._normalize_text(tamanho)]
-
-            # Fuzzy match pelo nome
-            nomes_db = [p['nome'] for p in produtos]
-            match = get_close_matches(nome, nomes_db, n=1, cutoff=0.7)
-            if match:
-                return next(p for p in produtos if p['nome'] == match[0])
-
-            return None
-        except Exception as e:
-            logger.error(f"Erro ao buscar produto: {e}")
-            return None
-
-    def get_neighborhood_tax(self, bairro: str) -> Optional[Dict]:
-        """
-        Busca a taxa de entrega para um bairro.
-
-        Args:
-            bairro: Nome do bairro
-
-        Returns:
-            Dicionário com dados do bairro ou None
-        """
-        try:
-            response = self.client.table('bairros').select('*').eq('status', 'Disponível').execute()
-            for neighborhood in response.data:
-                if self._normalize_text(neighborhood['nome']) == self._normalize_text(bairro):
-                    return neighborhood
-            return None
-        except Exception as e:
-            logger.error(f"Erro ao buscar bairro: {e}")
-            return None
-
-    def get_additional_by_name_and_size(self, nome: str, tamanho: Optional[str] = None) -> Optional[Dict]:
-        """
-        Busca um adicional pelo nome e tamanho (opcional).
-
-        Args:
-            nome: Nome do adicional
-            tamanho: Tamanho (opcional)
-
-        Returns:
-            Dicionário com dados do adicional ou None
-        """
-        try:
-            response = self.client.table('adicionais').select('*').eq('status', 'Disponível').execute()
-            for adicional in response.data:
-                if self._normalize_text(adicional['nome']) == self._normalize_text(nome):
-                    if tamanho is None or self._normalize_text(adicional.get('tamanho', '')) == self._normalize_text(tamanho):
-                        return adicional
-            return None
-        except Exception as e:
-            logger.error(f"Erro ao buscar adicional: {e}")
-            return None
-
     @staticmethod
     def _normalize_text(text: str) -> str:
         """Normaliza texto para comparação (minúsculas, sem acentos)."""
@@ -117,21 +35,74 @@ class SupabaseClient:
         text = ''.join([c for c in text if not unicodedata.combining(c)])
         return text.lower().strip()
 
+    def get_product_by_name_and_size(self, nome: str, tamanho: str) -> Optional[Dict]:
+        """Busca um produto pelo nome e tamanho."""
+        try:
+            response = self.client.table('produtos').select('*').eq('status', 'disponivel').execute()
+            nome_normalizado = self._normalize_text(nome)
+            tamanho_normalizado = self._normalize_text(tamanho)
+
+            for produto in response.data:
+                produto_nome = self._normalize_text(produto['nome'])
+                produto_tamanho = self._normalize_text(produto.get('tamanho', ''))
+
+                if produto_nome == nome_normalizado and produto_tamanho == tamanho_normalizado:
+                    logger.info(f"Produto encontrado no banco: {produto['nome']} ({produto.get('tamanho', '')})")
+                    return produto
+
+            logger.warning(f"Produto não encontrado: {nome} ({tamanho})")
+            return None
+        except Exception as e:
+            logger.error(f"Erro ao buscar produto: {e}")
+            return None
+
+    def get_neighborhood_tax(self, bairro: str) -> Optional[Dict]:
+        """Busca a taxa de entrega para um bairro."""
+        try:
+            response = self.client.table('bairros').select('*').eq('status', 'disponivel').execute()
+            bairro_normalizado = self._normalize_text(bairro)
+
+            for neighborhood in response.data:
+                if self._normalize_text(neighborhood['nome']) == bairro_normalizado:
+                    logger.info(f"Bairro encontrado: {neighborhood['nome']}")
+                    return neighborhood
+
+            logger.warning(f"Bairro não encontrado: {bairro}")
+            return None
+        except Exception as e:
+            logger.error(f"Erro ao buscar bairro: {e}")
+            return None
+
+    def get_additional_by_name_and_size(self, nome: str, tamanho: str = None) -> Optional[Dict]:
+        """Busca um adicional pelo nome e tamanho (opcional)."""
+        try:
+            response = self.client.table('adicionais').select('*').eq('status', 'disponivel').execute()
+            nome_normalizado = self._normalize_text(nome)
+            tamanho_normalizado = self._normalize_text(tamanho)
+
+            for adicional in response.data:
+                adicional_nome = self._normalize_text(adicional['nome'])
+                adicional_tamanho = self._normalize_text(adicional.get('tamanho', ''))
+
+                if adicional_nome == nome_normalizado and (tamanho is None or adicional_tamanho == tamanho_normalizado):
+                    logger.info(f"Adicional encontrado: {adicional['nome']} ({adicional.get('tamanho', '')})")
+                    return adicional
+
+            logger.warning(f"Adicional não encontrado: {nome} ({tamanho})")
+            return None
+        except Exception as e:
+            logger.error(f"Erro ao buscar adicional: {e}")
+            return None
+
 
 class OrderValidator:
     """Valida dados de pedidos contra o banco de dados."""
 
     def __init__(self, db_client: SupabaseClient):
-        """
-        Inicializa o validador.
-
-        Args:
-            db_client: Cliente Supabase
-        """
+        """Inicializa o validador."""
         self.db = db_client
 
     def validate_order(self, order_data: Dict) -> Dict:
-        """Valida um pedido completo."""
         errors = []
         corrections = []
         calculated_total = 0
@@ -160,7 +131,6 @@ class OrderValidator:
         errors.extend(total_validation['errors'])
         corrections.extend(total_validation['corrections'])
 
-        # Prepara resposta
         is_valid = len(errors) == 0
 
         return {
@@ -173,7 +143,6 @@ class OrderValidator:
         }
 
     def _validate_products(self, products: List[Dict]) -> Dict:
-        """Valida produtos do pedido usando correspondência aproximada."""
         errors = []
         corrections = []
         subtotal = 0
@@ -181,9 +150,13 @@ class OrderValidator:
         for product in products:
             nome = product.get('nome', '')
             preco_informado = product.get('preco', 0)
-            tamanho = product.get('tamanho', '')  # tamanho opcional
 
-            db_product = self.db.get_product_by_name_and_size(nome, tamanho)
+            # Extrai tamanho do nome
+            tamanho = self._extract_size_from_name(nome)
+            nome_base = self._remove_size_from_name(nome)
+
+            # Busca produto no banco
+            db_product = self.db.get_product_by_name_and_size(nome_base, tamanho)
 
             if db_product is None:
                 errors.append(f"Produto '{nome}' não encontrado no cardápio")
@@ -203,14 +176,9 @@ class OrderValidator:
                 else:
                     subtotal += preco_informado
 
-        return {
-            'errors': errors,
-            'corrections': corrections,
-            'subtotal': subtotal
-        }
+        return {'errors': errors, 'corrections': corrections, 'subtotal': subtotal}
 
     def _validate_delivery_tax(self, bairro: str, taxa_informada: float) -> Dict:
-        """Valida taxa de entrega."""
         errors = []
         corrections = []
         tax_amount = 0
@@ -238,14 +206,9 @@ class OrderValidator:
             else:
                 tax_amount = taxa_informada
 
-        return {
-            'errors': errors,
-            'corrections': corrections,
-            'tax_amount': tax_amount
-        }
+        return {'errors': errors, 'corrections': corrections, 'tax_amount': tax_amount}
 
     def _validate_total(self, valor_total_informado: float, valor_total_calculado: float) -> Dict:
-        """Valida valor total do pedido."""
         errors = []
         corrections = []
 
@@ -259,30 +222,18 @@ class OrderValidator:
                 'diferenca': valor_total_calculado - valor_total_informado
             })
 
-        return {
-            'errors': errors,
-            'corrections': corrections
-        }
+        return {'errors': errors, 'corrections': corrections}
 
     @staticmethod
-    def _build_summary(is_valid: bool, errors: List[str], corrections: List[Dict]) -> str:
-        """Constrói um resumo legível da validação."""
-        if is_valid:
-            return "✓ Pedido validado com sucesso! Todos os valores estão corretos."
+    def _extract_size_from_name(nome: str) -> str:
+        nome_lower = nome.lower()
+        if 'grande' in nome_lower:
+            return 'grande'
+        elif 'pequena' in nome_lower or 'pequeno' in nome_lower:
+            return 'pequeno'
+        elif 'média' in nome_lower or 'médio' in nome_lower:
+            return 'médio'
+        return ''
 
-        summary = "✗ Pedido contém erros:\n\n"
-        for i, error in enumerate(errors, 1):
-            summary += f"{i}. {error}\n"
-
-        if corrections:
-            summary += "\nCorreções necessárias:\n"
-            for correction in corrections:
-                if 'preco_correto' in correction:
-                    summary += f"- {correction['produto']}: R$ {correction['preco_correto']:.2f}\n"
-                elif 'taxa_correta' in correction:
-                    summary += f"- Taxa para {correction['bairro']}: R$ {correction['taxa_correta']:.2f}\n"
-                elif 'valor_calculado' in correction:
-                    summary += f"- Valor total correto: R$ {correction['valor_calculado']:.2f}\n"
-
-        return summary
-
+    @staticmethod
+    def _remove_size_from_name(nome: str) -> str
