@@ -92,7 +92,7 @@ Extraia os seguintes dados:
 - nome: Nome do cliente
 - telefone: Telefone sem formatação (apenas números)
 - unidade: Nome da unidade/loja
-- produtos: Lista de produtos com nome, tamanho e preço
+- produtos: Lista de produtos com nome (apenas o nome base, ex: 'Nordestina'), tipo (ex: 'Pizza', 'Refrigerante'), tamanho e preço
 - endereco: Endereço completo (se for entrega)
 - bairro: Nome do bairro (se for entrega)
 - taxa_entrega: Valor da taxa (0 se for retirada)
@@ -110,6 +110,7 @@ Retorne APENAS um JSON válido com a seguinte estrutura:
   "produtos": [
     {{
       "nome": "string",
+      "tipo_produto": "string",
       "tamanho": "string",
       "preco": number
     }}
